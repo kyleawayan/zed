@@ -30,6 +30,9 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: '1'
+  # Fetch git dependencies with the git CLI so Windows long-path support
+  # (core.longpaths) is honored; some deps have paths past the 260-char limit.
+  CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
 on:
   workflow_dispatch:
     inputs:
@@ -87,6 +90,14 @@ jobs:
     - name: Prepare Windows build environment
       shell: pwsh
       run: |
+        # 0) Enable long paths. Some cargo git dependencies (e.g. the `pet`
+        #    crate's test fixtures) have paths past Windows' 260-char limit, which
+        #    breaks `cargo fetch`/`cargo build`. Enable it at the OS level and for
+        #    git (CARGO_NET_GIT_FETCH_WITH_CLI makes cargo use git, which honors it).
+        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+            -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force | Out-Null
+        git config --system core.longpaths true
+
         # bundle-windows.ps1 hardcodes toolchain paths that assume Zed's own
         # runner image. GitHub's windows-2022 image lays some of them out
         # differently, so junction the expected paths into place here instead of
