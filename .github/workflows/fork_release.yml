@@ -50,6 +50,9 @@ jobs:
   bundle_mac_aarch64:
     if: ${{ inputs.platforms == 'both' || inputs.platforms == 'macos' }}
     runs-on: macos-14
+    # The signing secrets live in this environment, so the job must declare it or
+    # they resolve to empty and the build silently falls back to unsigned.
+    environment: "macOS build"
     env:
       # When all of these are set, bundle-mac signs with your Developer ID and
       # notarizes; when unset it falls back to an ad-hoc (unsigned) bundle.
@@ -155,7 +158,9 @@ jobs:
         if-no-files-found: error
     timeout-minutes: 120
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Include the platform so a macOS run doesn't cancel an in-flight Windows run
+  # (and vice versa); re-running the same platform still supersedes the old run.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.platforms }}
   cancel-in-progress: true
 defaults:
   run:
