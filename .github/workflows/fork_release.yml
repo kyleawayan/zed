@@ -49,32 +49,46 @@ permissions:
 jobs:
   bundle_mac_aarch64:
     if: ${{ inputs.platforms == 'both' || inputs.platforms == 'macos' }}
-    runs-on: macos-14
+    # macos-15 ships Xcode 16 / the MacOSX15 SDK. On macos-14 (Xcode 15.4) the
+    # webrtc-sys build fails a C++20 <ranges> static_assert in cxx.h, because
+    # rust::Slice's iterator isn't a contiguous_iterator under that libc++.
+    runs-on: macos-15
     # The signing secrets live in this environment, so the job must declare it or
     # they resolve to empty and the build silently falls back to unsigned.
     environment: "macOS build"
-    env:
-      # When all of these are set, bundle-mac signs with your Developer ID and
-      # notarizes; when unset it falls back to an ad-hoc (unsigned) bundle.
-      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
-      APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
-      APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
     steps:
     - name: Checkout repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
         clean: false
+    - name: Show toolchain
+      run: |
+        xcodebuild -version
+        xcrun --show-sdk-version
+        ls /Applications | grep -i '^Xcode' || true
     - name: Set up Node
       uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
       with:
         node-version: '20'
     - name: Add Rust target
       run: rustup target add aarch64-apple-darwin
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: macos-aarch64
+        cache-on-failure: true
     - name: Bundle macOS app
       run: ./script/bundle-mac aarch64-apple-darwin
+      # Scoped to this step rather than the job, so no other action in the job --
+      # including the third-party cache action -- ever has the signing
+      # credentials in scope.
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+        APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+        APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
     - name: Upload Zed-aarch64.dmg
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
@@ -147,6 +161,11 @@ jobs:
       # registry is populated so that offline read succeeds.
       shell: pwsh
       run: cargo fetch
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: windows-x86_64
+        cache-on-failure: true
     - name: Bundle Windows installer (unsigned)
       shell: pwsh
       run: script/bundle-windows.ps1 -Architecture x86_64
