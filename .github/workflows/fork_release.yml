@@ -6,13 +6,23 @@
 # Differences from the upstream `release.yml` / `run_bundling.yml`:
 #   - Uses GitHub-hosted runners instead of Zed's private Namespace/self-hosted
 #     runners, so it works on a fork with no special infrastructure.
-#   - Skips code signing / notarization (the bundle scripts already fall back to
-#     ad-hoc signing when the signing secrets are absent). The resulting builds
-#     are unsigned:
-#       * macOS: right-click the app -> Open to get past Gatekeeper.
-#       * Windows: click "More info" -> "Run anyway" on the SmartScreen prompt.
 #   - Trigger is manual only. Run it from the Actions tab via "Run workflow" and
 #     pick the branch you want to build.
+#
+# macOS signing (optional): if the repository defines the secrets below, the mac
+# build is signed with your own Developer ID and notarized, so it opens with a
+# normal double-click on any Mac (including MDM-managed ones). If they are absent
+# the build still succeeds but is only ad-hoc signed (right-click -> Open, and it
+# may be blocked on locked-down Macs). Required secrets:
+#   MACOS_SIGNING_IDENTITY       e.g. "Developer ID Application: Your Name (TEAMID)"
+#   MACOS_CERTIFICATE            base64 of the exported Developer ID .p12
+#   MACOS_CERTIFICATE_PASSWORD   password used when exporting the .p12
+#   APPLE_NOTARIZATION_KEY       contents of an App Store Connect API key (.p8)
+#   APPLE_NOTARIZATION_KEY_ID    that key's Key ID
+#   APPLE_NOTARIZATION_ISSUER_ID the Issuer ID (UUID) from the API Keys page
+#
+# Windows is always unsigned: click "More info" -> "Run anyway" on the SmartScreen
+# prompt once. The installer is per-user, so no admin rights are needed.
 #
 # Artifacts (the .dmg / .exe installer) are attached to the run summary page.
 name: fork_release
@@ -27,6 +37,15 @@ permissions:
 jobs:
   bundle_mac_aarch64:
     runs-on: macos-14
+    env:
+      # When all of these are set, bundle-mac signs with your Developer ID and
+      # notarizes; when unset it falls back to an ad-hoc (unsigned) bundle.
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+      APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+      APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
     steps:
     - name: Checkout repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -38,7 +57,7 @@ jobs:
         node-version: '20'
     - name: Add Rust target
       run: rustup target add aarch64-apple-darwin
-    - name: Bundle macOS app (unsigned)
+    - name: Bundle macOS app
       run: ./script/bundle-mac aarch64-apple-darwin
     - name: Upload Zed-aarch64.dmg
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

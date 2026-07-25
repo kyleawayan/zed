@@ -10,7 +10,9 @@ local_install=false
 can_code_sign=false
 
 # This must match the team in the provisioning profile.
-IDENTITY="Zed Industries, Inc."
+# Overridable so a fork can sign with its own Developer ID; upstream builds that
+# leave MACOS_SIGNING_IDENTITY unset keep signing as Zed.
+IDENTITY="${MACOS_SIGNING_IDENTITY:-Zed Industries, Inc.}"
 APPLE_NOTARIZATION_TEAM="MQ55VZLNZQ"
 
 # Function for displaying help info
@@ -196,7 +198,11 @@ function sign_app_binaries() {
     download_git "${target_triple}" "${app_path}/Contents/MacOS/git"
 
     # Note: The app identifier for our development builds is the same as the app identifier for nightly.
-    cp crates/zed/contents/$channel/embedded.provisionprofile "${app_path}/Contents/"
+    # Zed's provisioning profile is tied to Zed's team, so only embed it when signing as Zed. A fork
+    # signing with its own Developer ID must not carry a foreign team's provisioning profile.
+    if [[ -z "${MACOS_SIGNING_IDENTITY:-}" && -f "crates/zed/contents/$channel/embedded.provisionprofile" ]]; then
+        cp "crates/zed/contents/$channel/embedded.provisionprofile" "${app_path}/Contents/"
+    fi
 
     if [[ $can_code_sign = true ]]; then
         echo "Code signing binaries"
