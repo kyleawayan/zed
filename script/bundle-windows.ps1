@@ -13,6 +13,7 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
 $buildSuccess = $false
+$canCodeSign = $false
 
 $OSArchitecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
     "X64" { "x86_64" }
@@ -66,18 +67,31 @@ function CheckEnvironmentVariables {
         return
     }
 
-    $requiredVars = @(
-        'ZED_WORKSPACE', 'RELEASE_VERSION', 'ZED_RELEASE_CHANNEL',
-        'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET',
-        'ACCOUNT_NAME', 'CERT_PROFILE_NAME', 'ENDPOINT',
-        'FILE_DIGEST', 'TIMESTAMP_DIGEST', 'TIMESTAMP_SERVER'
-    )
+    $requiredVars = @('ZED_WORKSPACE', 'RELEASE_VERSION', 'ZED_RELEASE_CHANNEL')
 
     foreach ($var in $requiredVars) {
         if (-not (Test-Path "env:$var")) {
             Write-Error "$var is not set"
             exit 1
         }
+    }
+
+    # On forks the Azure signing secrets are not populated, so skip code signing
+    # instead of failing, like bundle-mac does.
+    $signingVars = @(
+        'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET',
+        'ACCOUNT_NAME', 'CERT_PROFILE_NAME', 'ENDPOINT',
+        'FILE_DIGEST', 'TIMESTAMP_DIGEST', 'TIMESTAMP_SERVER'
+    )
+
+    $missingVars = @($signingVars | Where-Object { -not (Test-Path "env:$_") })
+    if ($missingVars.Count -eq 0) {
+        $script:canCodeSign = $true
+    } else {
+        Write-Host "====== WARNING ======"
+        Write-Host "One or more of the following variables are missing: $($missingVars -join ', ')"
+        Write-Host "This bundle will not be code signed"
+        Write-Host "====== WARNING ======"
     }
 }
 
@@ -128,7 +142,7 @@ function BuildRemoteServer {
     # Create zipped remote server binary
     $remoteServerSrc = (Resolve-Path ".\$CargoOutDir\remote_server.exe").Path
 
-    if ($env:CI) {
+    if ($canCodeSign) {
         Write-Output "Code signing remote_server.exe"
         & "$innoDir\sign.ps1" $remoteServerSrc
     }
@@ -200,7 +214,7 @@ function MakeAppx {
 }
 
 function SignZedAndItsFriends {
-    if (-not $env:CI) {
+    if (-not $canCodeSign) {
         return
     }
 
@@ -340,7 +354,9 @@ function BuildInstaller {
     }
 
     $innoArgs = @($issFilePath) + $defs
-    if($env:CI) {
+    if($canCodeSign) {
+        # Checked by zed.iss to decide whether to sign the installer.
+        $env:ZED_SIGN_BUNDLE = "1"
         $signTool = "powershell.exe -ExecutionPolicy Bypass -File $innoDir\sign.ps1 `$f"
         $innoArgs += "/sDefaultsign=`"$signTool`""
     }
