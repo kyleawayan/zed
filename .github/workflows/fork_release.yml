@@ -95,7 +95,10 @@ jobs:
         name: Zed-aarch64.dmg
         path: target/aarch64-apple-darwin/release/Zed-aarch64.dmg
         if-no-files-found: error
-    timeout-minutes: 120
+    # A cold release build of Zed on a free 4-core hosted runner exceeds two
+    # hours; Zed's own CI uses 32-vCPU machines. 350 leaves headroom under the
+    # 6-hour hosted-runner ceiling. Cached runs finish far sooner.
+    timeout-minutes: 350
   bundle_windows_x86_64:
     if: ${{ inputs.platforms == 'both' || inputs.platforms == 'windows' }}
     runs-on: windows-2022
@@ -175,7 +178,10 @@ jobs:
         name: Zed-x86_64.exe
         path: target/Zed-x86_64.exe
         if-no-files-found: error
-    timeout-minutes: 120
+    # A cold release build of Zed on a free 4-core hosted runner exceeds two
+    # hours; Zed's own CI uses 32-vCPU machines. 350 leaves headroom under the
+    # 6-hour hosted-runner ceiling. Cached runs finish far sooner.
+    timeout-minutes: 350
 concurrency:
   # Include the platform so a macOS run doesn't cancel an in-flight Windows run
   # (and vice versa); re-running the same platform still supersedes the old run.
