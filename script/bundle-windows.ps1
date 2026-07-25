@@ -159,9 +159,14 @@ function ZipZedAndItsFriendsDebug {
         ".\$CargoOutDir\zed.pdb",
         ".\$CargoOutDir\cli.pdb",
         ".\$CargoOutDir\auto_update_helper.pdb",
-        ".\$CargoOutDir\explorer_command_injector.pdb",
-        ".\$CargoOutDir\remote_server.pdb"
+        ".\$CargoOutDir\explorer_command_injector.pdb"
     )
+
+    # remote_server.pdb only exists when the remote server was built; including a
+    # missing path would fail the archive.
+    if (Test-Path ".\$CargoOutDir\remote_server.pdb") {
+        $items += ".\$CargoOutDir\remote_server.pdb"
+    }
 
     Compress-Archive -Path $items -DestinationPath ".\$CargoOutDir\zed-$env:RELEASE_VERSION-$env:ZED_RELEASE_CHANNEL.dbg.zip" -Force
 }
@@ -385,7 +390,11 @@ CheckEnvironmentVariables
 PrepareForBundle
 GenerateLicenses
 BuildZedAndItsFriends
-BuildRemoteServer
+# The remote server is a separate cargo invocation that can't reuse the artifacts
+# above; skip it for builds that don't ship it.
+if (-not $env:ZED_SKIP_REMOTE_SERVER) {
+    BuildRemoteServer
+}
 MakeAppx
 SignZedAndItsFriends
 ZipZedAndItsFriendsDebug

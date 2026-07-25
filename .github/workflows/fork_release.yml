@@ -30,6 +30,12 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: '1'
+  # This workflow only publishes the desktop app, and the remote server is never
+  # bundled into it -- upstream ships it as a separate artifact that the client
+  # downloads at connect time. On the dev channel there is no such download
+  # anyway (crates/remote/src/transport/ssh.rs bails for ReleaseChannel::Dev), so
+  # building it is pure cost here. Use official Zed for remote SSH.
+  ZED_SKIP_REMOTE_SERVER: '1'
   # Fetch git dependencies with the git CLI so Windows long-path support
   # (core.longpaths) is honored; some deps have paths past the 260-char limit.
   CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
